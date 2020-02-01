@@ -1,6 +1,6 @@
 # Single-Cell-RNA-seq-Benchmark
 
-cellranger count --id=run_count_3kpbmc --fastqs=~/pmbc/pbmc3k_fastqs --transcriptome=./cellranger/refdata-cellranger-GRCh38-3.0.0 --expect-cells=3000
+cellranger count --id=run_count_3kpbmc --fastqs=~/pmbc/pbmc3k_fastqs --transcriptome=/home/jzhou417/cellranger/refdata-cellranger-GRCh38-3.0.0 --expect-cells=3000 --indice=SI-NA-E12
 
 cellranger mat2csv run_c
 
