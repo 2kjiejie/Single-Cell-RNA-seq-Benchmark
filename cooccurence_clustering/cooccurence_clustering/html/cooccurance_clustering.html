@@ -1,0 +1,774 @@
+
+<!DOCTYPE html
+  PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+      <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+   <!--
+This HTML was auto-generated from MATLAB code.
+To make changes, update the MATLAB code and republish this document.
+      --><title>cooccurance_clustering</title><meta name="generator" content="MATLAB 9.3"><link rel="schema.DC" href="http://purl.org/dc/elements/1.1/"><meta name="DC.date" content="2019-05-20"><meta name="DC.source" content="cooccurance_clustering.m"><style type="text/css">
+html,body,div,span,applet,object,iframe,h1,h2,h3,h4,h5,h6,p,blockquote,pre,a,abbr,acronym,address,big,cite,code,del,dfn,em,font,img,ins,kbd,q,s,samp,small,strike,strong,sub,sup,tt,var,b,u,i,center,dl,dt,dd,ol,ul,li,fieldset,form,label,legend,table,caption,tbody,tfoot,thead,tr,th,td{margin:0;padding:0;border:0;outline:0;font-size:100%;vertical-align:baseline;background:transparent}body{line-height:1}ol,ul{list-style:none}blockquote,q{quotes:none}blockquote:before,blockquote:after,q:before,q:after{content:'';content:none}:focus{outine:0}ins{text-decoration:none}del{text-decoration:line-through}table{border-collapse:collapse;border-spacing:0}
+
+html { min-height:100%; margin-bottom:1px; }
+html body { height:100%; margin:0px; font-family:Arial, Helvetica, sans-serif; font-size:10px; color:#000; line-height:140%; background:#fff none; overflow-y:scroll; }
+html body td { vertical-align:top; text-align:left; }
+
+h1 { padding:0px; margin:0px 0px 25px; font-family:Arial, Helvetica, sans-serif; font-size:1.5em; color:#d55000; line-height:100%; font-weight:normal; }
+h2 { padding:0px; margin:0px 0px 8px; font-family:Arial, Helvetica, sans-serif; font-size:1.2em; color:#000; font-weight:bold; line-height:140%; border-bottom:1px solid #d6d4d4; display:block; }
+h3 { padding:0px; margin:0px 0px 5px; font-family:Arial, Helvetica, sans-serif; font-size:1.1em; color:#000; font-weight:bold; line-height:140%; }
+
+a { color:#005fce; text-decoration:none; }
+a:hover { color:#005fce; text-decoration:underline; }
+a:visited { color:#004aa0; text-decoration:none; }
+
+p { padding:0px; margin:0px 0px 20px; }
+img { padding:0px; margin:0px 0px 20px; border:none; }
+p img, pre img, tt img, li img, h1 img, h2 img { margin-bottom:0px; } 
+
+ul { padding:0px; margin:0px 0px 20px 23px; list-style:square; }
+ul li { padding:0px; margin:0px 0px 7px 0px; }
+ul li ul { padding:5px 0px 0px; margin:0px 0px 7px 23px; }
+ul li ol li { list-style:decimal; }
+ol { padding:0px; margin:0px 0px 20px 0px; list-style:decimal; }
+ol li { padding:0px; margin:0px 0px 7px 23px; list-style-type:decimal; }
+ol li ol { padding:5px 0px 0px; margin:0px 0px 7px 0px; }
+ol li ol li { list-style-type:lower-alpha; }
+ol li ul { padding-top:7px; }
+ol li ul li { list-style:square; }
+
+.content { font-size:1.2em; line-height:140%; padding: 20px; }
+
+pre, code { font-size:12px; }
+tt { font-size: 1.2em; }
+pre { margin:0px 0px 20px; }
+pre.codeinput { padding:10px; border:1px solid #d3d3d3; background:#f7f7f7; }
+pre.codeoutput { padding:10px 11px; margin:0px 0px 20px; color:#4c4c4c; }
+pre.error { color:red; }
+
+@media print { pre.codeinput, pre.codeoutput { word-wrap:break-word; width:100%; } }
+
+span.keyword { color:#0000FF }
+span.comment { color:#228B22 }
+span.string { color:#A020F0 }
+span.untermstring { color:#B20000 }
+span.syscmd { color:#B28C00 }
+
+.footer { width:auto; padding:10px 0px; margin:25px 0px 0px; border-top:1px dotted #878787; font-size:0.8em; line-height:140%; font-style:italic; color:#878787; text-align:left; float:none; }
+.footer p { margin:0px; }
+.footer a { color:#878787; }
+.footer a:hover { color:#878787; text-decoration:underline; }
+.footer a:visited { color:#878787; }
+
+table th { padding:7px 5px; text-align:left; vertical-align:middle; border: 1px solid #d6d4d4; font-weight:bold; }
+table td { padding:7px 5px; text-align:left; vertical-align:top; border:1px solid #d6d4d4; }
+
+
+
+
+
+  </style></head><body><div class="content"><pre class="codeinput"><span class="keyword">function</span> [cell_labels, gene_labels, cell_cluster_best_snr, signature_for_which_celltype] = cooccurance_clustering(data, min_expressed_cells, min_pathway_size, min_population_size, snr_merge_threshold, diff_change_merge_threshold, fold_change_merge_threshold)
+
+<span class="keyword">if</span> ~exist(<span class="string">'snr_merge_threshold'</span>)
+    snr_merge_threshold = 1.5;
+<span class="keyword">end</span>
+
+<span class="keyword">if</span> ~exist(<span class="string">'fold_change_merge_threshold'</span>)
+    fold_change_merge_threshold = 2;
+<span class="keyword">end</span>
+
+<span class="keyword">if</span> ~exist(<span class="string">'diff_change_merge_threshold'</span>)
+    diff_change_merge_threshold = 0.5;
+<span class="keyword">end</span>
+
+
+<span class="comment">% data = double(counts_data~=0); % data here is the binary version</span>
+fprintf(1, <span class="string">'Processing data subset with %d genes and %d cells: \n'</span>, size(data,1), size(data,2));
+gene_labels = zeros(size(data,1),1);
+cell_labels = zeros(size(data,2),1);
+cell_cluster_best_snr = [];
+signature_for_which_celltype = [];
+
+<span class="comment">% filter out genes detected in too few cells</span>
+tic
+keep_ind = find(sum(data~=0,2)&gt;=min_expressed_cells &amp; sum(data==0,2)&gt;=min_expressed_cells);  <span class="comment">% only keep genes that express in &gt;=10 cells</span>
+data = data(keep_ind,:);
+fprintf(1, <span class="string">'Remove genes detected in &lt;%d cells. Remaining %d genes.  '</span>, min_expressed_cells, size(data,1));
+toc
+<span class="keyword">if</span> length(keep_ind)==0
+    <span class="keyword">return</span>
+<span class="keyword">end</span>
+
+
+<span class="comment">% Finding a threshold for the gene-gene chi2 values using random permute</span>
+tic
+fprintf(1, <span class="string">'Iterate 10 random permutations for gene-gene similarity threshold ... %4d '</span>, 0)
+rand_iter = 10;
+tmp = [];
+<span class="keyword">for</span> i=1:rand_iter
+    fprintf(1, <span class="string">'\b\b\b\b\b%4d '</span>, i)
+    perm_data = zeros(size(data));
+    [~,I] = sort(rand(size(data)),2);
+    perm_data = data((I-1)*size(data,1)+repmat((1:size(data,1))',1,size(data,2)));
+    clear <span class="string">I</span>
+    A_plus_B_vector = sum(perm_data~=0,2);
+    C_plus_D_vector = sum(perm_data==0,2);
+    A_plus_C_vector = sum(perm_data~=0,2)';
+    B_plus_D_vector = sum(perm_data==0,2)';
+    chi2_denominator = ((A_plus_B_vector*A_plus_C_vector).*(C_plus_D_vector*B_plus_D_vector));
+    A = perm_data*perm_data';
+    B = bsxfun(@minus, A_plus_B_vector, A); <span class="comment">% A_plus_B_vector - A; % B = A_plus_B - A;  % B2 = double(data~=0)*double(data==0)';</span>
+    C = bsxfun(@minus, A_plus_C_vector, A); <span class="comment">% A_plus_C_vector - A; % C = A_plus_C - A;  % C2 = double(data==0)*double(data~=0)';</span>
+    D = bsxfun(@minus, C_plus_D_vector, C); <span class="comment">% C_plus_D_vector - C; % D = C_plus_D - C;  % D2 = double(data==0)*double(data==0)';</span>
+    clear <span class="string">A_plus_B_vector</span> <span class="string">C_plus_D_vector</span> <span class="string">A_plus_C_vector</span> <span class="string">B_plus_D_vector</span>
+    AD = A.*D;
+    clear <span class="string">A</span> <span class="string">D</span>
+    BC = B.*C;
+    clear <span class="string">B</span> <span class="string">C</span>
+    AD_BC = AD-BC;
+    clear <span class="string">AD</span> <span class="string">BC</span>
+    chi2_numerator = sign(AD_BC).*(AD_BC.^2);
+    clear <span class="string">AD_BC</span>
+    rand_chi2_values = chi2_numerator./chi2_denominator;
+    clear <span class="string">chi2_numerator</span> <span class="string">chi2_denominator</span>
+    rand_chi2_values = rand_chi2_values - diag(diag(rand_chi2_values));                                         <span class="comment">% get rid of diagnal which should be all 1s</span>
+    rand_chi2_values(isnan(rand_chi2_values))=0;                                                                <span class="comment">% get rid of NaN</span>
+    rand_chi2_values(rand_chi2_values&lt;0)=0;                                                                     <span class="comment">% zero out the negative value</span>
+    rand_chi2_values(rand_chi2_values==1) = 0;                                                                  <span class="comment">% reduce 1s to the next largest value</span>
+    s = squareform(rand_chi2_values);
+    clear <span class="string">rand_chi2_values</span>
+    Y = sort(s,<span class="string">'descend'</span>);
+    clear <span class="string">s</span>
+    <span class="keyword">if</span> length(Y)==1
+        tmp = [tmp,Y(1)];  <span class="comment">% this will only happen if there are just two genes</span>
+    <span class="keyword">else</span>
+        tmp = [tmp,Y(2)];  <span class="comment">% pick the second largest rand chi2 value</span>
+    <span class="keyword">end</span>
+    clear <span class="string">Y</span>
+<span class="keyword">end</span>
+best_random_chi2_value = median(tmp);
+toc
+clear <span class="string">perm_data</span>
+
+
+
+
+
+<span class="comment">% Gene-gene similarity using all cells</span>
+tic
+fprintf(1, <span class="string">'Compute gene-gene similarity ... '</span>)
+num_cells = size(data,2);
+num_genes = size(data,1);
+A_plus_B_vector = sum(data~=0,2);  <span class="comment">% A_plus_B = repmat(sum(data~=0,2),1,size(data,1));</span>
+C_plus_D_vector = sum(data==0,2);  <span class="comment">% C_plus_D = repmat(sum(data==0,2),1,size(data,1));</span>
+A_plus_C_vector = sum(data~=0,2)'; <span class="comment">% A_plus_C = repmat(sum(data~=0,2)',size(data,1),1);</span>
+B_plus_D_vector = sum(data==0,2)'; <span class="comment">% B_plus_D = repmat(sum(data==0,2)',size(data,1),1);</span>
+chi2_denominator = ((A_plus_B_vector*A_plus_C_vector).*(C_plus_D_vector*B_plus_D_vector));
+A = data*data';
+B = bsxfun(@minus, A_plus_B_vector, A); <span class="comment">% A_plus_B_vector - A; % B = A_plus_B - A;  % B2 = double(data~=0)*double(data==0)';</span>
+C = bsxfun(@minus, A_plus_C_vector, A); <span class="comment">% A_plus_C_vector - A; % C = A_plus_C - A;  % C2 = double(data==0)*double(data~=0)';</span>
+D = bsxfun(@minus, C_plus_D_vector, C); <span class="comment">% C_plus_D_vector - C; % D = C_plus_D - C;  % D2 = double(data==0)*double(data==0)';</span>
+clear <span class="string">A_plus_B_vector</span> <span class="string">C_plus_D_vector</span> <span class="string">A_plus_C_vector</span> <span class="string">B_plus_D_vector</span>
+AD = A.*D;
+clear <span class="string">A</span> <span class="string">D</span>
+BC = B.*C;
+clear <span class="string">B</span> <span class="string">C</span>
+AD_BC = AD-BC;
+clear <span class="string">AD</span> <span class="string">BC</span>
+chi2_numerator = sign(AD_BC).*(AD_BC.^2);
+clear <span class="string">AD_BC</span>
+all_chi2_values = chi2_numerator./chi2_denominator;
+clear <span class="string">chi2_numerator</span> <span class="string">chi2_denominator</span>
+all_chi2_values = all_chi2_values - diag(diag(all_chi2_values));                                        <span class="comment">% get rid of diagnal which should be all 1s</span>
+all_chi2_values(isnan(all_chi2_values))=0;                                                              <span class="comment">% get rid of NaN</span>
+all_chi2_values(all_chi2_values&lt;0)=0;                                                                   <span class="comment">% zero out the negative value</span>
+all_chi2_values(all_chi2_values==1) = max(all_chi2_values(all_chi2_values~=1));                         <span class="comment">% reduce 1s to the next largest value</span>
+toc
+
+
+<span class="comment">% defind the threshold</span>
+[Y,I] = sort(all_chi2_values,2,<span class="string">'descend'</span>);
+mu = mean(Y(Y(:,1)&lt;best_random_chi2_value,1));
+sigma = std(Y(Y(:,1)&lt;best_random_chi2_value,1));
+threshold = mu + sigma;
+<span class="keyword">if</span> isnan(threshold) || threshold&lt;=0 || isinf(threshold)
+    threshold = min(Y(:,1));
+<span class="keyword">end</span>
+clear <span class="string">Y</span> <span class="string">I</span> <span class="string">mu</span> <span class="string">sigma</span> <span class="string">best_random_chi2_value</span>
+
+<span class="comment">% Use the threshold to select genes share co-occurrence patterns/clusters</span>
+tic
+fprintf(1, <span class="string">'Create gene-gene graph for clustering genes ... \n'</span>);
+
+    <span class="comment">% lower_triangle_adj = tril(all_chi2_values,-1);</span>
+    <span class="comment">% lower_triangle_adj(lower_triangle_adj&lt;threshold)=0;</span>
+    <span class="comment">% Graph2Binary(lower_triangle_adj,'G')</span>
+    <span class="comment">% niter = 20;</span>
+    <span class="comment">% [c,Q,labels,communities] = LouvainfromBin('G.bin',niter);</span>
+    <span class="comment">% clear lower_triangle_adj all_chi2_values</span>
+
+    A = all_chi2_values;
+    A(A&lt;threshold) = 0;
+    <span class="keyword">if</span> sum(sum(A~=0))==0
+        labels = zeros(1,size(A,1));
+    <span class="keyword">else</span>
+        graph_file = write_symmetric_adj_into_graph_file(A, <span class="string">'G.txt'</span>);
+        [labels] = clustering_graph_by_modularity(graph_file);
+    <span class="keyword">end</span>
+    clear <span class="string">all_chi2_values</span> <span class="string">A</span>
+
+[N] = hist(labels, 1:max(labels));
+gene_cluster_ID = find(N&gt;=min_pathway_size);
+selected_genes = find(ismember(labels,gene_cluster_ID));
+fprintf(1, <span class="string">'Gene-gene graph contains %d pathways, %d genes in total\n'</span>, length(unique(labels(selected_genes))), length(selected_genes));
+
+<span class="keyword">if</span> isempty(selected_genes)
+    toc
+    <span class="keyword">return</span>
+<span class="keyword">end</span>
+selected_gene_labels = labels(selected_genes);
+gene_labels(keep_ind(selected_genes)) = selected_gene_labels;
+gene_labels = standardize_idx(gene_labels);
+toc
+
+
+<span class="comment">% Use the selected genes to construct cell-cell graph and clusters</span>
+fprintf(1, <span class="string">'Create cell-cell graph for clustering cells ... \n'</span>);
+selected_data = data(selected_genes, :);
+selected_data_gene_cluster_mean = grpstats(selected_data, selected_gene_labels);
+<span class="keyword">if</span> size(data,2)&gt;=60
+    k=30;
+<span class="keyword">elseif</span> size(data,2)&gt;=10
+    k = round(size(data,2)/2);
+<span class="keyword">elseif</span> k&gt;=6
+    k=5;
+<span class="keyword">else</span>
+    k = size(data,2)-1;
+<span class="keyword">end</span>
+
+distance = <span class="string">'euclidean'</span>;
+<span class="keyword">if</span> size(selected_data_gene_cluster_mean,1)&gt;=3
+    [IDX,D] = knnsearch(selected_data_gene_cluster_mean',selected_data_gene_cluster_mean',<span class="string">'k'</span>,k+1,<span class="string">'Distance'</span>,distance);
+    IDX(:,1) = []; D(:,1) = [];
+<span class="keyword">else</span>
+    tmp = [];
+    <span class="keyword">for</span> ss=1:max(selected_gene_labels)
+        ind_tmp = find(selected_gene_labels==ss);
+        ind_tmp1 = ind_tmp(1:round(length(ind_tmp)/2));
+        ind_tmp2 = ind_tmp(round(length(ind_tmp)/2)+1:end);
+        tmp = [tmp; mean(selected_data(ind_tmp1,:),1);mean(selected_data(ind_tmp2,:),1)];
+    <span class="keyword">end</span>
+    [IDX,D] = knnsearch(tmp',tmp',<span class="string">'k'</span>,k+1,<span class="string">'Distance'</span>,distance);
+    IDX(:,1) = []; D(:,1) = [];
+<span class="keyword">end</span>
+G = knn2jaccard(IDX);
+
+    <span class="comment">% Graph2Binary(G,'G')</span>
+    <span class="comment">% niter = 20;</span>
+    <span class="comment">% [c,Q,labels,communities] = LouvainfromBin('G.bin',niter);</span>
+
+    A = G+G';
+    graph_file = write_symmetric_adj_into_graph_file(A, <span class="string">'G.txt'</span>);
+    [labels] = clustering_graph_by_modularity(graph_file);
+
+cell_labels = labels(:);
+fprintf(1, <span class="string">'Cell-cell graph contains %d cell types by community detection\n'</span>, length(unique(cell_labels)));
+toc
+
+
+<span class="comment">% decide whether these clusters are good, whether we should merge</span>
+<span class="keyword">if</span> max(cell_labels)==1
+    <span class="keyword">return</span>
+<span class="keyword">end</span>
+
+<span class="comment">% merge tiny cell clusters with the non-tiny cluster they are most connected to</span>
+cluster_size = hist(cell_labels,0:max(cell_labels));
+cluster_size(1)=[];
+<span class="keyword">if</span> size(selected_data_gene_cluster_mean,1)&gt;=2
+    tiny_clusters = find(cluster_size&lt;min_population_size);
+<span class="keyword">else</span>
+    [Y] = sort(cluster_size,<span class="string">'descend'</span>);
+    tiny_clusters = find(cluster_size&lt;Y(2));
+<span class="keyword">end</span>
+tiny_clusters_merge_to = zeros(size(tiny_clusters));
+<span class="keyword">for</span> i=1:length(tiny_clusters)
+    tmp = sum(grpstats(full(A(:,find(cell_labels==tiny_clusters(i)))),cell_labels,<span class="string">'max'</span>)',1);
+    tmp(tiny_clusters) = 0;
+    <span class="keyword">if</span> max(tmp)==0
+        pairwise_cluster_center_dist = squareform(pdist(grpstats(selected_data_gene_cluster_mean',cell_labels)));
+        tmp = pairwise_cluster_center_dist(tiny_clusters(i),:);
+        tmp(tiny_clusters) = Inf;
+        [~,tiny_clusters_merge_to(i)] = min(tmp);
+    <span class="keyword">else</span>
+        [~,tiny_clusters_merge_to(i)] = max(tmp);
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+<span class="keyword">for</span> i=1:length(tiny_clusters)
+    cell_labels(cell_labels==tiny_clusters(i)) = tiny_clusters_merge_to(i);
+<span class="keyword">end</span>
+cell_labels = standardize_idx(cell_labels);
+fprintf(1, <span class="string">'Cell-cell graph contains %d cell types after merging tiny cell clusters\n'</span>, length(unique(cell_labels)));
+<span class="keyword">if</span> max(cell_labels)==1
+    <span class="keyword">return</span>
+<span class="keyword">end</span>
+
+tmp = [];
+<span class="keyword">for</span> i=1:max(cell_labels)
+    <span class="keyword">for</span> j=i+1:max(cell_labels)
+        best_snr  = max(abs(get_correlations(selected_data_gene_cluster_mean(:,ismember(cell_labels,[i,j])), cell_labels(ismember(cell_labels,[i,j])), <span class="string">'snr'</span>))');
+        best_snr2 = max(compute_snr(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)), selected_data_gene_cluster_mean(:,ismember(cell_labels,j))));
+        best_snr3 = compute_snr_between_within(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)),selected_data_gene_cluster_mean(:,ismember(cell_labels,j)));
+        best_fold = max(exp(abs(log((mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)),2) + (1e-10))./ (mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,j)),2) + (1e-10))))));
+        [best_diff,ttt] = max(abs(mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)),2) - mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,j)),2) ));
+        tmp = [tmp; [i,j,best_snr, best_snr2, best_snr3, best_fold, best_diff, sum(selected_gene_labels==ttt)]];
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+adj = (squareform(tmp(:,3))&lt;snr_merge_threshold) | ((squareform(tmp(:,6))&lt;fold_change_merge_threshold | squareform(tmp(:,7))&lt;0.1 | squareform(tmp(:,7).*tmp(:,8))&lt;5) &amp; squareform(tmp(:,7))&lt;diff_change_merge_threshold);
+[~,~,~,components] = extract_connected_component(adj);
+<span class="keyword">if</span> size(components,2)~=1
+    new_cell_labels = cell_labels;
+    <span class="keyword">for</span> i=1:size(components,2)
+        new_cell_labels(ismember(cell_labels, find(components(:,i))))=i;
+    <span class="keyword">end</span>
+    cell_labels = new_cell_labels;
+<span class="keyword">else</span>
+    [adj,adj2, cost_value] = mst_from_dist_matrix(squareform(tmp(:,3)));
+    [i,j] = find(adj==1);
+    edges = unique(sort([i,j],2),<span class="string">'rows'</span>);
+    scores = zeros(size(edges,1),1);
+    <span class="keyword">for</span> i=1:size(edges,1)
+        adj_tmp = adj;
+        adj_tmp(edges(i,1),edges(i,2))=0;
+        adj_tmp(edges(i,2),edges(i,1))=0;
+        [~, ~, ~,components] = extract_connected_component(adj_tmp);
+        component_1 = find(components(:,1));
+        component_2 = find(components(:,2));
+        scores(i) = max(abs(get_correlations(selected_data_gene_cluster_mean, ismember(cell_labels,component_2), <span class="string">'snr'</span>))');
+        scores_snr(i) = max(abs(get_correlations(selected_data_gene_cluster_mean, ismember(cell_labels,component_2), <span class="string">'snr'</span>))');
+        scores_fold(i) = max(exp(abs(log((mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_1)),2) + (1e-10))./ (mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_2)),2) + (1e-10))))));
+        [scores_diff(i), ttt] = max(abs(mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_1)),2) - mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_2)),2) ));
+        score_diff_pathway_size(i) = sum(selected_gene_labels==ttt);
+    <span class="keyword">end</span>
+    [max_score,i] = max(scores);
+    ind = find(scores_snr&gt;snr_merge_threshold &amp; ((scores_fold&gt;fold_change_merge_threshold &amp; scores_diff&gt;0.1 &amp; scores_diff.*score_diff_pathway_size&gt;=5) | scores_diff&gt;diff_change_merge_threshold));
+    <span class="keyword">if</span> isempty(ind) <span class="comment">% max_score&lt;snr_merge_threshold</span>
+        cell_labels = cell_labels*0 + 1;
+    <span class="keyword">else</span>
+        [~,tt] = min(scores_snr(ind));
+        i = ind(tt);
+        adj_tmp = adj;
+        adj_tmp(edges(i,1),edges(i,2))=0;
+        adj_tmp(edges(i,2),edges(i,1))=0;
+        [~, ~, ~,components] = extract_connected_component(adj_tmp);
+        new_cell_labels = cell_labels;
+        <span class="keyword">for</span> i=1:size(components,2)
+            new_cell_labels(ismember(cell_labels, find(components(:,i))))=i;
+        <span class="keyword">end</span>
+        cell_labels = new_cell_labels;
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+fprintf(1, <span class="string">'Cell-cell graph contains %d cell types after merging\n'</span>, length(unique(cell_labels)));
+cell_cluster_best_snr = [];
+
+
+<span class="comment">% reorder the cell types and pathways for visualization</span>
+<span class="keyword">if</span> max(cell_labels)==1
+    <span class="keyword">return</span>
+<span class="keyword">end</span>
+pathway_in_cell_detection_rate = grpstats(data(gene_labels(keep_ind)~=0,:), gene_labels(keep_ind(gene_labels(keep_ind)~=0)));
+pathway_in_celltype_detection_rate = grpstats(pathway_in_cell_detection_rate',cell_labels')';
+<span class="keyword">try</span>
+    pathway_in_celltype_detection_rate_normalize = pathway_in_celltype_detection_rate./max(pathway_in_celltype_detection_rate,[],2);
+<span class="keyword">catch</span>
+    pathway_in_celltype_detection_rate_normalize = bsxfun(@rdivide, pathway_in_celltype_detection_rate, max(pathway_in_celltype_detection_rate,[],2));
+<span class="keyword">end</span>
+[U,S,V] = svds(pathway_in_celltype_detection_rate_normalize,1);
+[~,I_celltype] = sort(V);
+cell_labels_new = zeros(size(cell_labels));
+<span class="keyword">for</span> i=1:length(I_celltype)
+    cell_labels_new(cell_labels==I_celltype(i)) = i;
+<span class="keyword">end</span>
+cell_labels = cell_labels_new;
+
+useful = zeros(size(pathway_in_cell_detection_rate,1),1);
+scores = zeros(size(pathway_in_cell_detection_rate,1),max(cell_labels));
+<span class="keyword">for</span> k=1:max(cell_labels)
+    <span class="keyword">for</span> l=k+1:max(cell_labels)
+        tmp = get_correlations(pathway_in_cell_detection_rate(:,ismember(cell_labels,[k,l])),cell_labels(ismember(cell_labels,[k,l])),<span class="string">'snr'</span>);
+        useful = useful + double(abs(tmp)==max(abs(tmp)) | abs(tmp) &gt;=snr_merge_threshold);
+        scores(:,k) = scores(:,k) - tmp;
+        scores(:,l) = scores(:,l) + tmp;
+    <span class="keyword">end</span>
+<span class="keyword">end</span>
+[max_score,signature_for_which_celltype] = max(scores,[],2);
+pathway_order = [];
+<span class="keyword">for</span> k=1:max(cell_labels)
+    tmp_pathway = find(signature_for_which_celltype==k);
+    [~,I] = sort(max_score(tmp_pathway),<span class="string">'descend'</span>);
+    pathway_order = [pathway_order;tmp_pathway(I)];
+<span class="keyword">end</span>
+pathway_order(ismember(pathway_order, find(useful==0)))=[];
+signature_for_which_celltype = signature_for_which_celltype(pathway_order);
+gene_labels_new = zeros(size(gene_labels));
+<span class="keyword">for</span> i=1:length(pathway_order)
+    gene_labels_new(gene_labels==pathway_order(i)) = i;
+<span class="keyword">end</span>
+gene_labels = gene_labels_new;
+fprintf(1, <span class="string">'Number of useful pathways is %d\n'</span>, max(gene_labels));
+</pre><pre class="codeoutput error">Not enough input arguments.
+
+Error in cooccurance_clustering (line 18)
+fprintf(1, 'Processing data subset with %d genes and %d cells: \n', size(data,1), size(data,2));
+</pre><p class="footer"><br><a href="http://www.mathworks.com/products/matlab/">Published with MATLAB&reg; R2017b</a><br></p></div><!--
+##### SOURCE BEGIN #####
+
+function [cell_labels, gene_labels, cell_cluster_best_snr, signature_for_which_celltype] = cooccurance_clustering(data, min_expressed_cells, min_pathway_size, min_population_size, snr_merge_threshold, diff_change_merge_threshold, fold_change_merge_threshold)
+
+if ~exist('snr_merge_threshold') 
+    snr_merge_threshold = 1.5;
+end
+
+if ~exist('fold_change_merge_threshold')
+    fold_change_merge_threshold = 2;
+end
+
+if ~exist('diff_change_merge_threshold')
+    diff_change_merge_threshold = 0.5;
+end
+
+
+% data = double(counts_data~=0); % data here is the binary version
+fprintf(1, 'Processing data subset with %d genes and %d cells: \n', size(data,1), size(data,2));
+gene_labels = zeros(size(data,1),1);
+cell_labels = zeros(size(data,2),1);
+cell_cluster_best_snr = [];
+signature_for_which_celltype = [];
+
+% filter out genes detected in too few cells
+tic
+keep_ind = find(sum(data~=0,2)>=min_expressed_cells & sum(data==0,2)>=min_expressed_cells);  % only keep genes that express in >=10 cells
+data = data(keep_ind,:);
+fprintf(1, 'Remove genes detected in <%d cells. Remaining %d genes.  ', min_expressed_cells, size(data,1));
+toc
+if length(keep_ind)==0
+    return
+end
+
+
+% Finding a threshold for the gene-gene chi2 values using random permute
+tic
+fprintf(1, 'Iterate 10 random permutations for gene-gene similarity threshold ... %4d ', 0)
+rand_iter = 10;
+tmp = [];
+for i=1:rand_iter
+    fprintf(1, '\b\b\b\b\b%4d ', i)
+    perm_data = zeros(size(data));
+    [~,I] = sort(rand(size(data)),2);
+    perm_data = data((I-1)*size(data,1)+repmat((1:size(data,1))',1,size(data,2)));
+    clear I
+    A_plus_B_vector = sum(perm_data~=0,2);  
+    C_plus_D_vector = sum(perm_data==0,2); 
+    A_plus_C_vector = sum(perm_data~=0,2)';
+    B_plus_D_vector = sum(perm_data==0,2)';
+    chi2_denominator = ((A_plus_B_vector*A_plus_C_vector).*(C_plus_D_vector*B_plus_D_vector));
+    A = perm_data*perm_data';
+    B = bsxfun(@minus, A_plus_B_vector, A); % A_plus_B_vector - A; % B = A_plus_B - A;  % B2 = double(data~=0)*double(data==0)';
+    C = bsxfun(@minus, A_plus_C_vector, A); % A_plus_C_vector - A; % C = A_plus_C - A;  % C2 = double(data==0)*double(data~=0)';
+    D = bsxfun(@minus, C_plus_D_vector, C); % C_plus_D_vector - C; % D = C_plus_D - C;  % D2 = double(data==0)*double(data==0)';
+    clear A_plus_B_vector C_plus_D_vector A_plus_C_vector B_plus_D_vector
+    AD = A.*D; 
+    clear A D
+    BC = B.*C;
+    clear B C
+    AD_BC = AD-BC;
+    clear AD BC
+    chi2_numerator = sign(AD_BC).*(AD_BC.^2);
+    clear AD_BC
+    rand_chi2_values = chi2_numerator./chi2_denominator; 
+    clear chi2_numerator chi2_denominator
+    rand_chi2_values = rand_chi2_values - diag(diag(rand_chi2_values));                                         % get rid of diagnal which should be all 1s
+    rand_chi2_values(isnan(rand_chi2_values))=0;                                                                % get rid of NaN
+    rand_chi2_values(rand_chi2_values<0)=0;                                                                     % zero out the negative value
+    rand_chi2_values(rand_chi2_values==1) = 0;                                                                  % reduce 1s to the next largest value
+    s = squareform(rand_chi2_values);
+    clear rand_chi2_values
+    Y = sort(s,'descend');
+    clear s
+    if length(Y)==1
+        tmp = [tmp,Y(1)];  % this will only happen if there are just two genes
+    else
+        tmp = [tmp,Y(2)];  % pick the second largest rand chi2 value
+    end
+    clear Y
+end
+best_random_chi2_value = median(tmp);
+toc
+clear perm_data
+
+
+
+
+
+% Gene-gene similarity using all cells
+tic
+fprintf(1, 'Compute gene-gene similarity ... ')
+num_cells = size(data,2); 
+num_genes = size(data,1);
+A_plus_B_vector = sum(data~=0,2);  % A_plus_B = repmat(sum(data~=0,2),1,size(data,1));  
+C_plus_D_vector = sum(data==0,2);  % C_plus_D = repmat(sum(data==0,2),1,size(data,1));
+A_plus_C_vector = sum(data~=0,2)'; % A_plus_C = repmat(sum(data~=0,2)',size(data,1),1);
+B_plus_D_vector = sum(data==0,2)'; % B_plus_D = repmat(sum(data==0,2)',size(data,1),1);
+chi2_denominator = ((A_plus_B_vector*A_plus_C_vector).*(C_plus_D_vector*B_plus_D_vector));
+A = data*data';
+B = bsxfun(@minus, A_plus_B_vector, A); % A_plus_B_vector - A; % B = A_plus_B - A;  % B2 = double(data~=0)*double(data==0)';
+C = bsxfun(@minus, A_plus_C_vector, A); % A_plus_C_vector - A; % C = A_plus_C - A;  % C2 = double(data==0)*double(data~=0)';
+D = bsxfun(@minus, C_plus_D_vector, C); % C_plus_D_vector - C; % D = C_plus_D - C;  % D2 = double(data==0)*double(data==0)';
+clear A_plus_B_vector C_plus_D_vector A_plus_C_vector B_plus_D_vector
+AD = A.*D; 
+clear A D
+BC = B.*C;
+clear B C
+AD_BC = AD-BC;
+clear AD BC
+chi2_numerator = sign(AD_BC).*(AD_BC.^2);
+clear AD_BC
+all_chi2_values = chi2_numerator./chi2_denominator; 
+clear chi2_numerator chi2_denominator
+all_chi2_values = all_chi2_values - diag(diag(all_chi2_values));                                        % get rid of diagnal which should be all 1s
+all_chi2_values(isnan(all_chi2_values))=0;                                                              % get rid of NaN
+all_chi2_values(all_chi2_values<0)=0;                                                                   % zero out the negative value
+all_chi2_values(all_chi2_values==1) = max(all_chi2_values(all_chi2_values~=1));                         % reduce 1s to the next largest value
+toc
+
+
+% defind the threshold
+[Y,I] = sort(all_chi2_values,2,'descend');
+mu = mean(Y(Y(:,1)<best_random_chi2_value,1)); 
+sigma = std(Y(Y(:,1)<best_random_chi2_value,1));
+threshold = mu + sigma;
+if isnan(threshold) || threshold<=0 || isinf(threshold)
+    threshold = min(Y(:,1));
+end
+clear Y I mu sigma best_random_chi2_value
+
+% Use the threshold to select genes share co-occurrence patterns/clusters
+tic
+fprintf(1, 'Create gene-gene graph for clustering genes ... \n');
+
+    % lower_triangle_adj = tril(all_chi2_values,-1);
+    % lower_triangle_adj(lower_triangle_adj<threshold)=0;
+    % Graph2Binary(lower_triangle_adj,'G')
+    % niter = 20;
+    % [c,Q,labels,communities] = LouvainfromBin('G.bin',niter);
+    % clear lower_triangle_adj all_chi2_values
+    
+    A = all_chi2_values;
+    A(A<threshold) = 0;
+    if sum(sum(A~=0))==0
+        labels = zeros(1,size(A,1));
+    else
+        graph_file = write_symmetric_adj_into_graph_file(A, 'G.txt');
+        [labels] = clustering_graph_by_modularity(graph_file);
+    end
+    clear all_chi2_values A
+    
+[N] = hist(labels, 1:max(labels)); 
+gene_cluster_ID = find(N>=min_pathway_size); 
+selected_genes = find(ismember(labels,gene_cluster_ID));
+fprintf(1, 'Gene-gene graph contains %d pathways, %d genes in total\n', length(unique(labels(selected_genes))), length(selected_genes));
+
+if isempty(selected_genes)
+    toc
+    return
+end
+selected_gene_labels = labels(selected_genes);
+gene_labels(keep_ind(selected_genes)) = selected_gene_labels;
+gene_labels = standardize_idx(gene_labels);
+toc
+
+
+% Use the selected genes to construct cell-cell graph and clusters
+fprintf(1, 'Create cell-cell graph for clustering cells ... \n');
+selected_data = data(selected_genes, :);
+selected_data_gene_cluster_mean = grpstats(selected_data, selected_gene_labels);
+if size(data,2)>=60
+    k=30;
+elseif size(data,2)>=10
+    k = round(size(data,2)/2);
+elseif k>=6
+    k=5;
+else
+    k = size(data,2)-1;
+end
+
+distance = 'euclidean';
+if size(selected_data_gene_cluster_mean,1)>=3
+    [IDX,D] = knnsearch(selected_data_gene_cluster_mean',selected_data_gene_cluster_mean','k',k+1,'Distance',distance);
+    IDX(:,1) = []; D(:,1) = [];
+else
+    tmp = [];
+    for ss=1:max(selected_gene_labels)
+        ind_tmp = find(selected_gene_labels==ss);
+        ind_tmp1 = ind_tmp(1:round(length(ind_tmp)/2));
+        ind_tmp2 = ind_tmp(round(length(ind_tmp)/2)+1:end);
+        tmp = [tmp; mean(selected_data(ind_tmp1,:),1);mean(selected_data(ind_tmp2,:),1)];
+    end
+    [IDX,D] = knnsearch(tmp',tmp','k',k+1,'Distance',distance);
+    IDX(:,1) = []; D(:,1) = [];
+end
+G = knn2jaccard(IDX);
+
+    % Graph2Binary(G,'G')
+    % niter = 20;
+    % [c,Q,labels,communities] = LouvainfromBin('G.bin',niter);
+    
+    A = G+G';
+    graph_file = write_symmetric_adj_into_graph_file(A, 'G.txt');
+    [labels] = clustering_graph_by_modularity(graph_file);    
+
+cell_labels = labels(:);
+fprintf(1, 'Cell-cell graph contains %d cell types by community detection\n', length(unique(cell_labels)));
+toc
+
+
+% decide whether these clusters are good, whether we should merge
+if max(cell_labels)==1
+    return
+end
+
+% merge tiny cell clusters with the non-tiny cluster they are most connected to
+cluster_size = hist(cell_labels,0:max(cell_labels)); 
+cluster_size(1)=[];
+if size(selected_data_gene_cluster_mean,1)>=2
+    tiny_clusters = find(cluster_size<min_population_size);
+else
+    [Y] = sort(cluster_size,'descend');
+    tiny_clusters = find(cluster_size<Y(2));
+end
+tiny_clusters_merge_to = zeros(size(tiny_clusters));
+for i=1:length(tiny_clusters)
+    tmp = sum(grpstats(full(A(:,find(cell_labels==tiny_clusters(i)))),cell_labels,'max')',1);
+    tmp(tiny_clusters) = 0;
+    if max(tmp)==0
+        pairwise_cluster_center_dist = squareform(pdist(grpstats(selected_data_gene_cluster_mean',cell_labels)));
+        tmp = pairwise_cluster_center_dist(tiny_clusters(i),:);
+        tmp(tiny_clusters) = Inf;
+        [~,tiny_clusters_merge_to(i)] = min(tmp);
+    else
+        [~,tiny_clusters_merge_to(i)] = max(tmp);
+    end
+end
+for i=1:length(tiny_clusters)
+    cell_labels(cell_labels==tiny_clusters(i)) = tiny_clusters_merge_to(i);
+end
+cell_labels = standardize_idx(cell_labels);
+fprintf(1, 'Cell-cell graph contains %d cell types after merging tiny cell clusters\n', length(unique(cell_labels)));
+if max(cell_labels)==1
+    return
+end
+
+tmp = [];
+for i=1:max(cell_labels)
+    for j=i+1:max(cell_labels)
+        best_snr  = max(abs(get_correlations(selected_data_gene_cluster_mean(:,ismember(cell_labels,[i,j])), cell_labels(ismember(cell_labels,[i,j])), 'snr'))');
+        best_snr2 = max(compute_snr(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)), selected_data_gene_cluster_mean(:,ismember(cell_labels,j))));
+        best_snr3 = compute_snr_between_within(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)),selected_data_gene_cluster_mean(:,ismember(cell_labels,j)));
+        best_fold = max(exp(abs(log((mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)),2) + (1e-10))./ (mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,j)),2) + (1e-10))))));
+        [best_diff,ttt] = max(abs(mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,i)),2) - mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,j)),2) ));
+        tmp = [tmp; [i,j,best_snr, best_snr2, best_snr3, best_fold, best_diff, sum(selected_gene_labels==ttt)]];
+    end
+end
+adj = (squareform(tmp(:,3))<snr_merge_threshold) | ((squareform(tmp(:,6))<fold_change_merge_threshold | squareform(tmp(:,7))<0.1 | squareform(tmp(:,7).*tmp(:,8))<5) & squareform(tmp(:,7))<diff_change_merge_threshold);
+[~,~,~,components] = extract_connected_component(adj);
+if size(components,2)~=1
+    new_cell_labels = cell_labels;
+    for i=1:size(components,2)
+        new_cell_labels(ismember(cell_labels, find(components(:,i))))=i;
+    end
+    cell_labels = new_cell_labels;
+else
+    [adj,adj2, cost_value] = mst_from_dist_matrix(squareform(tmp(:,3)));
+    [i,j] = find(adj==1);
+    edges = unique(sort([i,j],2),'rows');
+    scores = zeros(size(edges,1),1);
+    for i=1:size(edges,1)
+        adj_tmp = adj;
+        adj_tmp(edges(i,1),edges(i,2))=0;
+        adj_tmp(edges(i,2),edges(i,1))=0;
+        [~, ~, ~,components] = extract_connected_component(adj_tmp);
+        component_1 = find(components(:,1));
+        component_2 = find(components(:,2));
+        scores(i) = max(abs(get_correlations(selected_data_gene_cluster_mean, ismember(cell_labels,component_2), 'snr'))');
+        scores_snr(i) = max(abs(get_correlations(selected_data_gene_cluster_mean, ismember(cell_labels,component_2), 'snr'))');
+        scores_fold(i) = max(exp(abs(log((mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_1)),2) + (1e-10))./ (mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_2)),2) + (1e-10))))));
+        [scores_diff(i), ttt] = max(abs(mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_1)),2) - mean(selected_data_gene_cluster_mean(:,ismember(cell_labels,component_2)),2) ));
+        score_diff_pathway_size(i) = sum(selected_gene_labels==ttt);
+    end
+    [max_score,i] = max(scores);
+    ind = find(scores_snr>snr_merge_threshold & ((scores_fold>fold_change_merge_threshold & scores_diff>0.1 & scores_diff.*score_diff_pathway_size>=5) | scores_diff>diff_change_merge_threshold));
+    if isempty(ind) % max_score<snr_merge_threshold
+        cell_labels = cell_labels*0 + 1;
+    else
+        [~,tt] = min(scores_snr(ind));
+        i = ind(tt);
+        adj_tmp = adj;
+        adj_tmp(edges(i,1),edges(i,2))=0;
+        adj_tmp(edges(i,2),edges(i,1))=0;
+        [~, ~, ~,components] = extract_connected_component(adj_tmp);
+        new_cell_labels = cell_labels;
+        for i=1:size(components,2)
+            new_cell_labels(ismember(cell_labels, find(components(:,i))))=i;
+        end
+        cell_labels = new_cell_labels;
+    end
+end
+fprintf(1, 'Cell-cell graph contains %d cell types after merging\n', length(unique(cell_labels)));
+cell_cluster_best_snr = [];
+
+
+% reorder the cell types and pathways for visualization
+if max(cell_labels)==1
+    return
+end
+pathway_in_cell_detection_rate = grpstats(data(gene_labels(keep_ind)~=0,:), gene_labels(keep_ind(gene_labels(keep_ind)~=0)));
+pathway_in_celltype_detection_rate = grpstats(pathway_in_cell_detection_rate',cell_labels')';
+try 
+    pathway_in_celltype_detection_rate_normalize = pathway_in_celltype_detection_rate./max(pathway_in_celltype_detection_rate,[],2);
+catch
+    pathway_in_celltype_detection_rate_normalize = bsxfun(@rdivide, pathway_in_celltype_detection_rate, max(pathway_in_celltype_detection_rate,[],2));
+end
+[U,S,V] = svds(pathway_in_celltype_detection_rate_normalize,1);
+[~,I_celltype] = sort(V);
+cell_labels_new = zeros(size(cell_labels));
+for i=1:length(I_celltype)
+    cell_labels_new(cell_labels==I_celltype(i)) = i;
+end
+cell_labels = cell_labels_new;
+
+useful = zeros(size(pathway_in_cell_detection_rate,1),1);
+scores = zeros(size(pathway_in_cell_detection_rate,1),max(cell_labels));
+for k=1:max(cell_labels)
+    for l=k+1:max(cell_labels)
+        tmp = get_correlations(pathway_in_cell_detection_rate(:,ismember(cell_labels,[k,l])),cell_labels(ismember(cell_labels,[k,l])),'snr');
+        useful = useful + double(abs(tmp)==max(abs(tmp)) | abs(tmp) >=snr_merge_threshold);
+        scores(:,k) = scores(:,k) - tmp;
+        scores(:,l) = scores(:,l) + tmp;
+    end
+end
+[max_score,signature_for_which_celltype] = max(scores,[],2);
+pathway_order = [];
+for k=1:max(cell_labels)
+    tmp_pathway = find(signature_for_which_celltype==k);
+    [~,I] = sort(max_score(tmp_pathway),'descend');
+    pathway_order = [pathway_order;tmp_pathway(I)];
+end    
+pathway_order(ismember(pathway_order, find(useful==0)))=[];
+signature_for_which_celltype = signature_for_which_celltype(pathway_order);
+gene_labels_new = zeros(size(gene_labels));
+for i=1:length(pathway_order)
+    gene_labels_new(gene_labels==pathway_order(i)) = i;
+end
+gene_labels = gene_labels_new;
+fprintf(1, 'Number of useful pathways is %d\n', max(gene_labels));
+
+##### SOURCE END #####
+--></body></html>
